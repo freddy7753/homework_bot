@@ -29,6 +29,7 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяем доступность переменных окружения"""
+
     return all(
         (env is not None for env in (
             PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
