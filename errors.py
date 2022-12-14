@@ -1,0 +1,3 @@
+
+class NoneInVariables(Exception):
+    pass
