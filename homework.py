@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 from http import HTTPStatus
 
@@ -7,7 +8,7 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from errors import NoneInVariables
+from exceptions import NoneInVariables
 
 load_dotenv()
 
@@ -118,7 +119,7 @@ def main():
         format='%(asctime)s [%(levelname)s] %(message)s %(name)s'
     )
     logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler()
+    handler = logging.StreamHandler(stream=sys.stdout)
     logger.addHandler(handler)
 
     if not check_tokens():
