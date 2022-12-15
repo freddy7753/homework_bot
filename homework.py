@@ -12,6 +12,8 @@ from exceptions import NoneInVariables
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
@@ -28,8 +30,7 @@ HOMEWORK_VERDICTS = {
 
 
 def check_tokens():
-    """Проверяем доступность переменных окружения"""
-
+    """Проверяем доступность переменных окружения."""
     return all(
         (env is not None for env in (
             PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
@@ -37,16 +38,16 @@ def check_tokens():
 
 
 def send_message(bot, message):
-    """Отправляем сообщение в телеграмм"""
+    """Отправляем сообщение в телеграмм."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logging.debug('message send')
+        logger.debug('message send')
     except Exception:
-        logging.error('message not send error')
+        logger.error('message not send error')
 
 
 def get_api_answer(timestamp: int):
-    """Получаем ответ response из Практикума"""
+    """Получаем ответ response из Практикума."""
     try:
         response = requests.get(
             ENDPOINT,
@@ -56,54 +57,54 @@ def get_api_answer(timestamp: int):
         if response.status_code == HTTPStatus.OK:
             return response.json()
         else:
-            logging.error('error response API')
+            logger.error('error response API')
             raise AssertionError(
                 f'endpoint is unreachable. status: {response.status_code}'
             )
     except Exception as error_response_api:
-        logging.error(f'error {error_response_api}')
+        logger.error(f'error {error_response_api}')
         raise AssertionError(
             f'endpoint is unreachable. status: {response.status_code}'
         )
 
 
 def check_response(response):
-    """Проверяем ответ сервера на соответствие документации"""
+    """Проверяем ответ сервера на соответствие документации."""
     if not isinstance(response, dict):
-        logging.error('response is not dict')
+        logger.error('response is not dict')
         raise TypeError('response is not type dict')
 
     if 'homeworks' not in response:
-        logging.error('key homeworks not found in response')
+        logger.error('key homeworks not found in response')
         raise KeyError('key homeworks not found')
 
     if not isinstance(response.get('homeworks'), list):
-        logging.error('key homeworks is not list')
+        logger.error('key homeworks is not list')
         raise TypeError('key homeworks is not list')
 
     if not response.get('homeworks'):
-        logging.error('key homeworks is empty')
+        logger.error('key homeworks is empty')
         raise IndexError('key homeworks empty list')
 
     return response.get('homeworks')
 
 
 def parse_status(homework):
-    """Извлекаем статус определенной домашней работы"""
+    """Извлекаем статус определенной домашней работы."""
     try:
         homework_name = homework['homework_name']
     except KeyError():
-        logging.error('key homework_name not found')
+        logger.error('key homework_name not found')
         raise KeyError('key homework_name not found')
 
     try:
         status = homework['status']
     except KeyError():
-        logging.error('key status not found')
+        logger.error('key status not found')
         raise KeyError('key status not found')
 
     if status not in HOMEWORK_VERDICTS:
-        logging.error('status not in HOMEWORK_VERDICTS')
+        logger.error('status not in HOMEWORK_VERDICTS')
         raise KeyError('status not in HOMEWORK_VERDICTS')
     else:
         verdict = HOMEWORK_VERDICTS[status]
@@ -115,16 +116,8 @@ def parse_status(homework):
 
 def main():
     """Основная логика работы бота."""
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s [%(levelname)s] %(message)s %(name)s'
-    )
-    logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler(stream=sys.stdout)
-    logger.addHandler(handler)
-
     if not check_tokens():
-        logging.critical('tokens unavailable')
+        logger.critical('tokens unavailable')
         raise NoneInVariables('tokens unavailable')
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
@@ -138,14 +131,19 @@ def main():
             if message != first_status:
                 send_message(bot, message)
                 first_status = message
-            logging.debug('new status missing')
+            logger.debug('new status missing')
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logging.error('program run error')
+            logger.error('program run error')
             send_message(bot, message)
         finally:
             time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(
+        logging.Formatter('%(asctime)s [%(levelname)s] %(message)s %(name)s')
+    )
+    logger.addHandler(handler)
     main()
