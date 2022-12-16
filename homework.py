@@ -3,7 +3,6 @@ import os
 import sys
 import time
 from http import HTTPStatus
-from logging.handlers import RotatingFileHandler
 
 import requests
 import telegram
