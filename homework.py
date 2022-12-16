@@ -3,6 +3,7 @@ import os
 import sys
 import time
 from http import HTTPStatus
+from logging.handlers import RotatingFileHandler
 
 import requests
 import telegram
@@ -31,19 +32,23 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяем доступность переменных окружения."""
-    return all(
-        (env is not None for env in (
-            PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
-    )
+    tokens = (PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
+    token_available = True
+    for token in tokens:
+        if token is None:
+            logger.critical(f'token is unavailable {token}')
+            token_available = False
+    return token_available
 
 
 def send_message(bot, message):
-    """Отправляем сообщение в телеграмм."""
+    """Отправляем сообщение в телеграм."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logger.debug('message send')
     except Exception:
         logger.error('message not send error')
+    else:
+        logger.debug('message send')
 
 
 def get_api_answer(timestamp: int):
@@ -54,64 +59,56 @@ def get_api_answer(timestamp: int):
             headers=HEADERS,
             params={'from_date': timestamp}
         )
+    except Exception:
+        raise ConnectionError(
+            f'endpoint is unreachable. status: {response.status_code}'
+        )
+    else:
         if response.status_code == HTTPStatus.OK:
             return response.json()
         else:
-            logger.error('error response API')
             raise AssertionError(
                 f'endpoint is unreachable. status: {response.status_code}'
             )
-    except Exception as error_response_api:
-        logger.error(f'error {error_response_api}')
-        raise AssertionError(
-            f'endpoint is unreachable. status: {response.status_code}'
-        )
 
 
 def check_response(response):
     """Проверяем ответ сервера на соответствие документации."""
     if not isinstance(response, dict):
-        logger.error('response is not dict')
-        raise TypeError('response is not type dict')
+        raise TypeError(f'response is not type dict{type(response)}')
 
     if 'homeworks' not in response:
-        logger.error('key homeworks not found in response')
         raise KeyError('key homeworks not found')
 
-    if not isinstance(response.get('homeworks'), list):
-        logger.error('key homeworks is not list')
+    if not isinstance(response['homeworks'], list):
         raise TypeError('key homeworks is not list')
 
-    if not response.get('homeworks'):
-        logger.error('key homeworks is empty')
+    homeworks = response['homeworks']
+    if not homeworks:
         raise IndexError('key homeworks empty list')
 
-    return response.get('homeworks')
+    return homeworks
 
 
 def parse_status(homework):
     """Извлекаем статус определенной домашней работы."""
-    try:
-        homework_name = homework['homework_name']
-    except KeyError():
-        logger.error('key homework_name not found')
+    if not homework.get('homework_name'):
+        # Почему-то только с get pytest пропускает
         raise KeyError('key homework_name not found')
 
-    try:
-        status = homework['status']
-    except KeyError():
-        logger.error('key status not found')
+    if not homework['status']:
         raise KeyError('key status not found')
 
+    homework_name = homework['homework_name']
+    status = homework['status']
     if status not in HOMEWORK_VERDICTS:
-        logger.error('status not in HOMEWORK_VERDICTS')
         raise KeyError('status not in HOMEWORK_VERDICTS')
-    else:
-        verdict = HOMEWORK_VERDICTS[status]
-        return (
-            f'Изменился статус проверки работы '
-            f'"{homework_name}". {verdict}'
-        )
+
+    verdict = HOMEWORK_VERDICTS[status]
+    return (
+        f'Изменился статус проверки работы '
+        f'"{homework_name}". {verdict}'
+    )
 
 
 def main():
@@ -120,30 +117,41 @@ def main():
         logger.critical('tokens unavailable')
         raise NoneInVariables('tokens unavailable')
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    timestamp = int(time.time())
+    timestamp = 0
     first_status = ''
+    repeated_error = ''
 
     while True:
         try:
             response = get_api_answer(timestamp)
-            homework = check_response(response)
-            message = parse_status(homework[0])
+            homeworks = check_response(response)
+            message = parse_status(homeworks[0])
             if message != first_status:
                 send_message(bot, message)
                 first_status = message
-            logger.debug('new status missing')
+            # logging.debug('new status missing')
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logger.error('program run error')
-            send_message(bot, message)
+            if repeated_error != message:
+                send_message(bot, message)
+                repeated_error = message
         finally:
             time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter('%(asctime)s [%(levelname)s] %(message)s %(name)s')
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format=(
+            '%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(funcName)s'
+        ),
+        handlers=[
+            logging.StreamHandler(stream=sys.stdout),
+            logging.handlers.RotatingFileHandler(
+                'my_logger.log', maxBytes=10000000, backupCount=3
+                # тут ошибка какая-то, не смог разобраться
+            )
+        ]
     )
-    logger.addHandler(handler)
     main()
