@@ -31,11 +31,15 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяем доступность переменных окружения."""
-    tokens = (PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
+    tokens = {
+        'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
+        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
+        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
+    }
     token_available = True
-    for token in tokens:
+    for value, token in tokens.items():
         if token is None:
-            logger.critical(f'token is unavailable {token}')
+            logger.critical(f'token is unavailable {value}')
             token_available = False
     return token_available
 
@@ -63,26 +67,27 @@ def get_api_answer(timestamp: int):
             f'endpoint is unreachable. status: {response.status_code}'
         )
     else:
-        if response.status_code == HTTPStatus.OK:
-            return response.json()
-        else:
+        if response.status_code != HTTPStatus.OK:
             raise AssertionError(
                 f'endpoint is unreachable. status: {response.status_code}'
             )
+        return response.json()
 
 
 def check_response(response):
     """Проверяем ответ сервера на соответствие документации."""
     if not isinstance(response, dict):
-        raise TypeError(f'response is not type dict{type(response)}')
+        raise TypeError(f'expected type dict, got type: {type(response)}')
 
     if 'homeworks' not in response:
         raise KeyError('key homeworks not found')
 
-    if not isinstance(response['homeworks'], list):
-        raise TypeError('key homeworks is not list')
-
     homeworks = response['homeworks']
+    if not isinstance(homeworks, list):
+        raise TypeError(
+            f'key homeworks is type: {type(homeworks)}, expected type: list'
+        )
+
     if not homeworks:
         raise IndexError('key homeworks empty list')
 
@@ -91,23 +96,21 @@ def check_response(response):
 
 def parse_status(homework):
     """Извлекаем статус определенной домашней работы."""
-    if not homework.get('homework_name'):
-        # Почему-то только с get pytest пропускает
+    if 'homework_name' not in homework:
         raise KeyError('key homework_name not found')
 
-    if not homework['status']:
+    if 'status' not in homework:
         raise KeyError('key status not found')
 
     homework_name = homework['homework_name']
     status = homework['status']
     if status not in HOMEWORK_VERDICTS:
-        raise KeyError('status not in HOMEWORK_VERDICTS')
+        raise KeyError(f'{status} not in HOMEWORK_VERDICTS.'
+                       f' Available keys is {HOMEWORK_VERDICTS.keys()}')
 
     verdict = HOMEWORK_VERDICTS[status]
-    return (
-        f'Изменился статус проверки работы '
-        f'"{homework_name}". {verdict}'
-    )
+    return (f'Изменился статус проверки работы '  # Строка была в заготовке
+            f'"{homework_name}". {verdict}')
 
 
 def main():
@@ -128,7 +131,6 @@ def main():
             if message != first_status:
                 send_message(bot, message)
                 first_status = message
-            # logging.debug('new status missing')
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logger.error('program run error')
@@ -146,11 +148,10 @@ if __name__ == '__main__':
             '%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(funcName)s'
         ),
         handlers=[
-            logging.StreamHandler(stream=sys.stdout),
-            logging.handlers.RotatingFileHandler(
-                'my_logger.log', maxBytes=10000000, backupCount=3
-                # тут ошибка какая-то, не смог разобраться
-            )
+            logging.FileHandler(
+                f'{os.path.dirname(os.path.abspath(__file__))}/output.log'
+            ),
+            logging.StreamHandler(sys.stdout)
         ]
     )
     main()
