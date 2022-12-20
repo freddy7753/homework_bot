@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+TOKENS = ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID')
 
 RETRY_PERIOD = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
@@ -31,15 +32,10 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяем доступность переменных окружения."""
-    tokens = {
-        'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
-        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
-        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
-    }
     token_available = True
-    for value, token in tokens.items():
-        if token is None:
-            logger.critical(f'token is unavailable {value}')
+    for token in ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID'):
+        if globals()[token] is None:
+            logger.critical(f'token is unavailable {token}')
             token_available = False
     return token_available
 
@@ -102,12 +98,11 @@ def parse_status(homework):
     if 'status' not in homework:
         raise KeyError('key status not found')
 
-    homework_name = homework['homework_name']
     status = homework['status']
     if status not in HOMEWORK_VERDICTS:
         raise KeyError(f'{status} not in HOMEWORK_VERDICTS.'
                        f' Available keys is {HOMEWORK_VERDICTS.keys()}')
-
+    homework_name = homework['homework_name']
     verdict = HOMEWORK_VERDICTS[status]
     return (f'Изменился статус проверки работы '  # Строка была в заготовке
             f'"{homework_name}". {verdict}')
